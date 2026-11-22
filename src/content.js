@@ -7,8 +7,9 @@
   const ext = globalThis.browser || globalThis.chrome;
   const C = globalThis.ChatTreeCluster;
   const API = globalThis.ChatTreeAPI;
-  const PALETTE = ["#c2603a", "#3b7dd8", "#2e9d6a", "#a855c7", "#d4a21a", "#d2486e", "#1fa3a8", "#7a6cf0", "#8a9a2b", "#e07b1f", "#5a8fa8", "#b5651d"];
-  const MISC = "#9a958b";
+  // Topic colours: Anthropic's Claude palette (clay, sky, olive, fig, kraft, cactus, heather) and deeper tones of the same hues.
+  const PALETTE = ["#d97757", "#6a9bcc", "#788c5d", "#c46686", "#d4a27f", "#7fa79b", "#9b97c2", "#b85c3f", "#4f7fae", "#5f7347", "#a5506e", "#b5865f"];
+  const MISC = "#91908a";
   const STALE_MS = 10 * 60 * 1000;
 
   // ---------- storage (local only) ----------
@@ -19,7 +20,7 @@
 
   // ---------- state ----------
   const S = {
-    org: null, chats: [], tags: {}, deep: {}, settings: { fab: true, deep: false, hubs: true, smart: true }, emb: {}, embVec: new Map(),
+    org: null, chats: [], tags: {}, deep: {}, settings: { fab: "auto", deep: false, hubs: true, smart: true }, emb: {}, embVec: new Map(),
     view: "tree", group: "topics", query: "", range: "all", starred: false, project: "", tag: "",
     index: null, tree: null, visible: null, hits: null, selected: null, loading: false, status: "", hiddenTopics: new Set(),
   };
@@ -77,56 +78,121 @@
   root.append(wrap);
 
   const fab = h("button", { class: "fab", title: "Chat Tree (Alt+Shift+K)", "aria-label": "Open Chat Tree", onclick: () => toggle() }, svg(ICON));
-  const search = h("input", { type: "search", placeholder: "Search chats…  ( / )", oninput: (e) => { S.query = e.target.value; render(); } ,
-    onkeydown: (e) => { if (e.key === "Enter") { const first = firstVisible(); if (first != null) openChat(S.chats[first].uuid, e.ctrlKey || e.metaKey); } } });
+  const search = h("input", { type: "search", placeholder: "Search chats", "aria-label": "Search chats", oninput: (e) => { S.query = e.target.value; render(); },
+    onkeydown: (e) => {
+      if (e.key === "Enter") { const first = firstVisible(); if (first != null) openChat(S.chats[first].uuid, e.ctrlKey || e.metaKey); }
+      if (e.key === "ArrowDown") { e.preventDefault(); focusRow(0); }
+    } });
   const viewBtns = {};
-  const viewSeg = h("div", { class: "seg" }, ["tree", "graph"].map((v) => (viewBtns[v] = h("button", { onclick: () => { S.view = v; render(); } }, v === "tree" ? "Tree" : "Graph"))));
-  const groupSel = h("select", { title: "Group the tree by", onchange: (e) => { S.group = e.target.value; render(); } },
+  const tabs = ["tree", "graph"].map((v) => (viewBtns[v] = h("button", { class: "tab", role: "tab", "aria-selected": "false", onclick: () => setView(v) }, v === "tree" ? "Tree" : "Graph")));
+  const groupSel = h("select", { title: "Group the tree by", "aria-label": "Group the tree by", onchange: (e) => { S.group = e.target.value; render(); } },
     h("option", { value: "topics" }, "Auto topics"), h("option", { value: "tags" }, "My tags"), h("option", { value: "projects" }, "Projects"), h("option", { value: "months" }, "Month"));
-  const refreshBtn = h("button", { title: "Reload chats from claude.ai", onclick: () => refresh(true) }, "Refresh");
-  const exportSel = h("select", { title: "Export", onchange: (e) => { if (e.target.value) doExport(e.target.value); e.target.value = ""; } },
-    h("option", { value: "" }, "Export…"), h("option", { value: "md" }, "Markdown outline"), h("option", { value: "json" }, "JSON (with tags)"));
-  const settingsBtn = h("button", { title: "Settings and shortcuts", onclick: () => { S.selected = "__settings"; renderSide(); } }, "⚙");
-  const closeBtn = h("button", { class: "close", title: "Close (Esc)", onclick: () => toggle(false) }, "✕");
+  const ICON_REFRESH = "M20 11a8 8 0 1 0 -2.3 5.7|M20 5v6h-6";
+  const ICON_GEAR = "M12 15a3 3 0 1 0 0-6a3 3 0 0 0 0 6|M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3a1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8a1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z";
+  const ICON_X = "M6 6l12 12|M18 6L6 18";
+  const refreshBtn = h("button", { class: "icon", title: "Reload chats from claude.ai", "aria-label": "Reload chats", onclick: () => refresh(true) }, svg(ICON_REFRESH));
+  const exportSel = h("select", { title: "Export", "aria-label": "Export", onchange: (e) => { if (e.target.value) doExport(e.target.value); e.target.value = ""; } },
+    h("option", { value: "" }, "Export"), h("option", { value: "md" }, "Markdown outline"), h("option", { value: "json" }, "JSON (with tags)"));
+  const settingsBtn = h("button", { class: "icon", title: "Settings and shortcuts", "aria-label": "Settings", onclick: () => { S.selected = "__settings"; renderSide(); } }, svg(ICON_GEAR));
+  const closeBtn = h("button", { class: "icon", title: "Close (Esc)", "aria-label": "Close", onclick: () => toggle(false) }, svg(ICON_X));
 
-  const rangeSel = h("select", { onchange: (e) => { S.range = e.target.value; render(); } },
+  const rangeSel = h("select", { "aria-label": "Time range", onchange: (e) => { S.range = e.target.value; render(); } },
     h("option", { value: "all" }, "Any time"), h("option", { value: "7" }, "Last 7 days"), h("option", { value: "30" }, "Last 30 days"),
     h("option", { value: "90" }, "Last 3 months"), h("option", { value: "365" }, "Last year"), h("option", { value: "old" }, "Older than a year"));
   const starChk = h("input", { type: "checkbox", onchange: (e) => { S.starred = e.target.checked; render(); } });
-  const projSel = h("select", { onchange: (e) => { S.project = e.target.value; render(); } });
-  const tagSel = h("select", { onchange: (e) => { S.tag = e.target.value; render(); } });
-  const resultCount = h("span");
+  const projSel = h("select", { "aria-label": "Project", onchange: (e) => { S.project = e.target.value; render(); } });
+  const tagSel = h("select", { "aria-label": "Tag", onchange: (e) => { S.tag = e.target.value; render(); } });
+  const resultCount = h("span", { "aria-live": "polite" });
 
-  const main = h("div", { class: "main" });
-  const side = h("aside", { class: "side" });
-  const statusEl = h("span");
-  const panel = h("div", { class: "panel", role: "dialog", "aria-label": "Chat Tree" },
-    h("header", null, h("span", { class: "title" }, svg(ICON), "Chat Tree"), search, viewSeg, groupSel, refreshBtn, exportSel, settingsBtn, closeBtn),
+  const main = h("div", { class: "main", onkeydown: treeKeys });
+  const side = h("aside", { class: "side", "aria-label": "Details" });
+  const statusEl = h("span", { role: "status" });
+  const hint = (label, ...keys) => h("span", null, label, keys.map((k) => h("kbd", null, k)));
+  const panel = h("div", { class: "panel", role: "dialog", "aria-modal": "true", "aria-label": "Chat Tree", onkeydown: trapFocus },
+    h("div", { class: "top" }, h("span", { class: "title" }, svg(ICON), "Chat Tree"), search, h("span", { class: "close" }), refreshBtn, exportSel, settingsBtn, closeBtn),
+    h("div", { class: "tabs", role: "tablist", "aria-label": "View" }, tabs, groupSel, h("span", { class: "spacer" }), resultCount),
     h("div", { class: "filters" }, h("label", null, "When", rangeSel), h("label", null, starChk, "Starred only"),
-      h("label", null, "Project", projSel), h("label", null, "Tag", tagSel), resultCount),
+      h("label", null, "Project", projSel), h("label", null, "Tag", tagSel)),
     h("div", { class: "body" }, main, side),
-    h("footer", null, statusEl, h("span", { class: "grow" }), h("span", null, "Everything stays in this browser. Alt+Shift+K to toggle.")));
+    h("footer", null, statusEl, h("span", { class: "grow" }),
+      h("span", { class: "hints" }, hint("Close", "Esc"), " ", hint("Change view", "←", "→"), " ", hint("Search", "/"), " ", hint("Open", "↵"))));
   const overlay = h("div", { class: "overlay", onclick: (e) => { if (e.target === overlay) toggle(false); } }, panel);
   wrap.append(fab, overlay);
+
+  function setView(v) { S.view = v; render(); }
+
+  // Keyboard: arrow keys move through chats in the tree, Enter opens, Tab stays inside the panel.
+  function rows() { return [...main.querySelectorAll("a.chat")].filter((a) => a.offsetParent !== null); }
+  function focusRow(i) { const r = rows(); if (r.length) r[Math.max(0, Math.min(r.length - 1, i))].focus(); }
+  function treeKeys(e) {
+    const a = e.composedPath().find((el) => el.classList && el.classList.contains("chat"));
+    if (!a) return;
+    const r = rows(), i = r.indexOf(a);
+    if (e.key === "ArrowDown") { e.preventDefault(); focusRow(i + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); if (i === 0) search.focus(); else focusRow(i - 1); }
+    else if (e.key === "Enter") { e.preventDefault(); openChat(a.dataset.id, e.ctrlKey || e.metaKey); }
+    else if (e.key === " ") { e.preventDefault(); select(a.dataset.id); }
+  }
+  function trapFocus(e) {
+    if (e.key !== "Tab") return;
+    const f = [...panel.querySelectorAll("button, input, select, a[href], summary, canvas[tabindex]")].filter((el) => el.offsetParent !== null);
+    if (!f.length) return;
+    const active = root.activeElement;
+    if (e.shiftKey && active === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+    else if (!e.shiftKey && active === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+  }
 
   function mount() { if (!document.documentElement.contains(host)) document.documentElement.append(host); }
   mount();
   new MutationObserver(mount).observe(document.documentElement, { childList: true });
 
-  function applyTheme() {
-    const bg = getComputedStyle(document.body || document.documentElement).backgroundColor;
-    const m = bg.match(/\d+/g);
-    let dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (m && m.length >= 3 && !(m.length === 4 && +m[3] === 0)) dark = (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) < 128;
-    wrap.classList.toggle("dark", dark);
+  // ---------- theme: read claude.ai's own design tokens so the panel matches it exactly ----------
+  function token(cs, names) {
+    for (const n of names) {
+      const v = cs.getPropertyValue(n).trim();
+      if (!v) continue;
+      if (/^\d+(\.\d+)?\s+\d+(\.\d+)?%\s+\d+(\.\d+)?%/.test(v)) return "hsl(" + v.replace(/\s*\/\s*/, " / ") + ")"; // "60 20% 99%" style
+      if (/^(#|rgb|hsl|oklch|color\()/.test(v)) return v;
+    }
+    return null;
   }
+  function luminance(color) {
+    const probe = document.createElement("span"); probe.style.color = color; document.body.append(probe);
+    const m = getComputedStyle(probe).color.match(/[\d.]+/g); probe.remove();
+    return m ? (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) : 255;
+  }
+  function applyTheme() {
+    const cs = getComputedStyle(document.documentElement);
+    const bodyBg = getComputedStyle(document.body || document.documentElement).backgroundColor;
+    const bg = token(cs, ["--bg-100"]) || (bodyBg && !/rgba\(0, 0, 0, 0\)/.test(bodyBg) ? bodyBg : null);
+    let dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (bg && document.body) dark = luminance(bg) < 128;
+    wrap.classList.toggle("dark", dark);
+    const map = {
+      "--bg": ["--bg-100"], "--panel": ["--bg-000"], "--raised": ["--bg-200"], "--hover": ["--bg-300"],
+      "--line": ["--border-300", "--border-200"], "--text": ["--text-000", "--text-100"], "--muted": ["--text-400", "--text-300", "--text-500"],
+      "--accent": ["--accent-brand", "--accent-main-100", "--brand-000"],
+    };
+    Object.entries(map).forEach(([k, names]) => { const v = token(cs, names); if (v) wrap.style.setProperty(k, v); else wrap.style.removeProperty(k); });
+    const accent = token(cs, ["--accent-brand", "--accent-main-100"]);
+    if (accent) { wrap.style.setProperty("--accent-soft", "color-mix(in srgb, " + accent + " 16%, transparent)"); wrap.style.setProperty("--hit", "color-mix(in srgb, " + accent + " 32%, transparent)"); }
+    const font = getComputedStyle(document.body || document.documentElement).fontFamily;
+    if (font) wrap.style.setProperty("--font", font);
+    S.dark = dark;
+  }
+  if (document.documentElement) new MutationObserver(() => { if (isOpen) { applyTheme(); if (G) draw(); } }).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "data-mode", "style"] });
 
   // ---------- open / close ----------
   let isOpen = false;
-  async function toggle(force) {
+  let lastFocus = null;
+  // opts: { view: "tree" | "graph", query: "text" } (used when opened from claude.ai's Search window)
+  async function toggle(force, opts) {
     isOpen = force === undefined ? !isOpen : force;
     overlay.classList.toggle("open", isOpen);
-    if (!isOpen) { stopGraph(); return; }
+    if (!isOpen) { stopGraph(); if (lastFocus && lastFocus.focus) try { lastFocus.focus(); } catch (e) { /* gone */ } return; }
+    lastFocus = document.activeElement;
+    if (opts && opts.view) S.view = opts.view;
+    if (opts && typeof opts.query === "string") { S.query = opts.query; search.value = opts.query; }
     applyTheme();
     const cur = currentChatId();
     if (cur) S.selected = cur;
@@ -216,7 +282,7 @@
   // ---------- render ----------
   function render() {
     if (!isOpen) return;
-    Object.entries(viewBtns).forEach(([v, b]) => b.classList.toggle("on", S.view === v));
+    Object.entries(viewBtns).forEach(([v, b]) => b.setAttribute("aria-selected", String(S.view === v)));
     groupSel.style.display = S.view === "tree" ? "" : "none";
     if (!S.chats.length) {
       stopGraph();
@@ -314,8 +380,10 @@
         n.y = base[1] + (Math.random() - 0.5) * jitter * 2 + (n.topic ? 0 : (Math.random() - 0.5) * 500);
         n.vx = 0; n.vy = 0;
         n.color = n.topic ? PALETTE[n.topic.color % PALETTE.length] : MISC;
-        n.r = n.kind === "topic" ? 6 + Math.sqrt(n.topic.members.length) * 1.6 : 4;
+        n.deg = 0;
       });
+      g.links.forEach((l) => { if (!l.hub) { g.nodes[l.source].deg++; g.nodes[l.target].deg++; } });
+      g.nodes.forEach((n) => { n.r = n.kind === "topic" ? 5 + Math.sqrt(n.topic.members.length) * 1.2 : 4.2 + Math.min(4, Math.sqrt(n.deg) * 1.2); });
       S.graph = { nodes: g.nodes, links: g.links, hubs: S.settings.hubs };
       if (G) G.alpha = 1;
     }
@@ -390,11 +458,13 @@
   }
 
   function renderLegend() {
-    fill(G.legend, 
-      S.tree.roots.map((r, ri) => h("div", { class: S.hiddenTopics.has(r) ? "dim" : "", title: "Click to hide or show",
+    const head = h("button", { class: "legend-head", "aria-expanded": String(!!S.legendOpen), onclick: () => { S.legendOpen = !S.legendOpen; renderLegend(); } },
+      "Topics", h("span", { class: "count" }, S.tree.roots.length), S.legendOpen ? " ▴" : " ▾");
+    fill(G.legend, head, S.legendOpen ? [
+      S.tree.roots.map((r, ri) => h("div", { class: S.hiddenTopics.has(r) ? "dim" : "", title: "Click to hide or show", role: "button", tabindex: "0",
         onclick: () => { S.hiddenTopics.has(r) ? S.hiddenTopics.delete(r) : S.hiddenTopics.add(r); renderLegend(); draw(); } },
         h("span", { class: "dot", style: { background: PALETTE[ri % PALETTE.length] } }), r.label, h("span", { class: "count" }, r.members.length))),
-      S.tree.misc.length ? h("div", null, h("span", { class: "dot", style: { background: MISC } }), "Other", h("span", { class: "count" }, S.tree.misc.length)) : null);
+      S.tree.misc.length ? h("div", null, h("span", { class: "dot", style: { background: MISC } }), "Other", h("span", { class: "count" }, S.tree.misc.length)) : null] : null);
   }
 
   function nodeShown(n) {
@@ -408,6 +478,7 @@
     const n = nodes.length;
     // Repulsion on a grid so large chat lists stay fast.
     const cell = 80, grid = new Map();
+    const hubs = nodes.filter((q) => q.kind === "topic");
     nodes.forEach((p, i) => { const key = Math.floor(p.x / cell) + "," + Math.floor(p.y / cell); if (!grid.has(key)) grid.set(key, []); grid.get(key).push(i); });
     nodes.forEach((p) => {
       const gx = Math.floor(p.x / cell), gy = Math.floor(p.y / cell);
@@ -422,14 +493,20 @@
           p.vx += ddx * f * a; p.vy += ddy * f * a;
         }
       }
+      // Topic hubs push each other apart at any distance, so clusters get their own space.
+      if (p.kind === "topic") hubs.forEach((q) => {
+        if (q === p) return;
+        let dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy + 1;
+        const f = 9000 / d2; p.vx += dx * f * a / Math.sqrt(d2) * 4; p.vy += dy * f * a / Math.sqrt(d2) * 4;
+      });
       // Weak pull to the centre.
       p.vx -= p.x * 0.002 * a; p.vy -= p.y * 0.002 * a;
     });
     links.forEach((l) => {
       const s = nodes[l.source], t = nodes[l.target];
       const dx = t.x - s.x, dy = t.y - s.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
-      const target = l.hub ? 45 : 40 + (1 - l.w) * 50;
-      const k = (l.hub ? 0.08 : 0.06 * (0.5 + l.w)) * a;
+      const target = l.hub ? 18 + 5 * Math.sqrt(s.topic ? s.topic.members.length : 4) : 40 + (1 - l.w) * 50;
+      const k = (l.hub ? 0.18 : 0.03 * (0.5 + l.w)) * a;
       const f = (d - target) / d * k;
       if (!t.fixed) { t.vx -= dx * f; t.vy -= dy * f; }
       if (!s.fixed) { s.vx += dx * f; s.vy += dy * f; }
@@ -468,49 +545,109 @@
     draw();
   }
 
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  const alpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, "0");
+
   function draw() {
     if (!G || !S.graph) return;
-    const { ctx, view } = G, dark = wrap.classList.contains("dark");
+    const { ctx, view } = G;
+    const cs = getComputedStyle(wrap);
+    const C_ = { text: cs.getPropertyValue("--text").trim(), muted: cs.getPropertyValue("--muted").trim(), panel: cs.getPropertyValue("--panel").trim(),
+      line: cs.getPropertyValue("--line").trim(), accent: cs.getPropertyValue("--accent").trim(), font: cs.getPropertyValue("--font").trim() || "system-ui" };
     ctx.setTransform(G.dpr, 0, 0, G.dpr, 0, 0);
     ctx.clearRect(0, 0, G.w, G.h);
     ctx.translate(G.w / 2 + view.x, G.h / 2 + view.y); ctx.scale(view.k, view.k);
+    const k = view.k, px = (v) => v / k; // screen pixels -> world units
     const nodes = S.graph.nodes;
     const selIdx = S.byId.get(S.selected);
     const focus = G.hover || (selIdx != null ? nodes[selIdx] : null);
     const neighbours = new Set();
     const query = !!S.query;
-    ctx.lineWidth = 1 / view.k;
+
+    // 1) Soft halo behind each topic's chats.
+    S.tree.roots.forEach((r, ri) => {
+      if (S.hiddenTopics.has(r)) return;
+      const pts = r.members.filter((m) => S.visible.has(m)).map((m) => nodes[m]);
+      if (pts.length < 2) return;
+      let cx = 0, cy = 0; pts.forEach((p) => { cx += p.x; cy += p.y; }); cx /= pts.length; cy /= pts.length;
+      const ds = pts.map((p) => Math.hypot(p.x - cx, p.y - cy)).sort((a, b) => a - b);
+      const rad = ds[Math.floor(ds.length * 0.8)] + 16;
+      const col = PALETTE[ri % PALETTE.length];
+      ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+      ctx.fillStyle = alpha(col, S.dark ? 0.08 : 0.07); ctx.fill();
+      ctx.lineWidth = px(1); ctx.strokeStyle = alpha(col, 0.22); ctx.stroke();
+    });
+
+    // 2) Links as gentle curves; the focused chat's links stand out.
     S.graph.links.forEach((l) => {
       const s = nodes[l.source], t = nodes[l.target];
       if (!nodeShown(s) || !nodeShown(t)) return;
       const lit = focus && (s === focus || t === focus);
       if (lit) { neighbours.add(s); neighbours.add(t); }
-      ctx.strokeStyle = lit ? (dark ? "rgba(255,255,255,.7)" : "rgba(0,0,0,.55)") : l.hub ? (dark ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.05)") : (dark ? "rgba(255,255,255,.14)" : "rgba(0,0,0,.12)");
-      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y); ctx.stroke();
+      if (l.hub && !lit) return; // hub spokes only show for the focused topic
+      const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2, dx = t.x - s.x, dy = t.y - s.y;
+      const cxp = mx - dy * 0.12, cyp = my + dx * 0.12;
+      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.quadraticCurveTo(cxp, cyp, t.x, t.y);
+      ctx.lineWidth = px(lit ? 1.6 : 0.6 + l.w * 1.2);
+      ctx.strokeStyle = lit ? alpha(s.color.length === 7 ? s.color : "#888888", 0.9) : C_.line;
+      ctx.stroke();
     });
+
+    // 3) Chat dots, ringed in the panel colour so overlapping dots stay readable.
     nodes.forEach((n) => {
-      if (!nodeShown(n)) return;
-      const dim = (focus && !neighbours.has(n) && n !== focus) || (query && n.kind === "chat" && !S.hits.has(n.i));
-      ctx.globalAlpha = dim ? 0.25 : 1;
-      ctx.fillStyle = n.color;
-      ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.fill();
-      if (n.kind === "chat" && S.chats[n.i].uuid === S.selected) { ctx.lineWidth = 2.5 / view.k; ctx.strokeStyle = dark ? "#fff" : "#000"; ctx.stroke(); ctx.lineWidth = 1 / view.k; }
+      if (!nodeShown(n) || n.kind === "topic") return;
+      const dim = (focus && !neighbours.has(n) && n !== focus) || (query && !S.hits.has(n.i));
+      ctx.globalAlpha = dim ? (G.hover || query ? 0.22 : 0.6) : 1;
+      const isSel = S.chats[n.i].uuid === S.selected;
+      if (isSel) { ctx.beginPath(); ctx.arc(n.x, n.y, n.r + px(5), 0, Math.PI * 2); ctx.fillStyle = alpha(n.color.length === 7 ? n.color : "#888888", 0.25); ctx.fill(); }
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fillStyle = n.color; ctx.fill();
+      ctx.lineWidth = px(isSel ? 2 : 1.2); ctx.strokeStyle = isSel ? C_.text : C_.panel; ctx.stroke();
     });
     ctx.globalAlpha = 1;
-    // Labels: topics always; chats when zoomed in, or for the focus and its neighbours.
-    ctx.textAlign = "center"; ctx.textBaseline = "top";
-    nodes.forEach((n) => {
-      if (!nodeShown(n)) return;
-      const isTopic = n.kind === "topic";
-      if (!isTopic && view.k < 1.6 && !neighbours.has(n) && n !== focus && !(query && S.hits.has(n.i) && S.hits.size < 40)) return;
-      const label = isTopic ? n.label : S.chats[n.i].name;
-      const size = (isTopic ? 13 : 11) / Math.max(view.k, 0.6);
-      ctx.font = (isTopic ? "600 " : "") + size + "px system-ui, sans-serif";
-      const txt = label.length > 42 ? label.slice(0, 40) + "…" : label;
-      ctx.lineWidth = 3 / view.k; ctx.strokeStyle = dark ? "rgba(31,30,27,.9)" : "rgba(251,250,247,.9)";
-      ctx.strokeText(txt, n.x, n.y + n.r + 2 / view.k);
-      ctx.fillStyle = dark ? "#ece9e2" : "#22201c";
-      ctx.fillText(txt, n.x, n.y + n.r + 2 / view.k);
+
+    // 4) Labels in screen space, skipping any that would overlap one already drawn.
+    ctx.setTransform(G.dpr, 0, 0, G.dpr, 0, 0);
+    const toScreen = (n) => [G.w / 2 + view.x + n.x * k, G.h / 2 + view.y + n.y * k];
+    const placed = [];
+    const fits = (x, y, w, h) => { if (placed.some((p) => x < p[0] + p[2] && x + w > p[0] && y < p[1] + p[3] && y + h > p[1])) return false; placed.push([x, y, w, h]); return true; };
+    // Topic pills first, biggest topics win space.
+    nodes.filter((n) => n.kind === "topic" && nodeShown(n)).sort((a, b) => b.topic.members.length - a.topic.members.length).forEach((n) => {
+      let [sx, sy] = n.kind === "topic" ? toScreen(n) : [0, 0];
+      ctx.font = "500 12.5px " + C_.font;
+      const label = n.label.length > 30 ? n.label.slice(0, 29) + "…" : n.label;
+      const w = ctx.measureText(label).width + 28, h = 24;
+      const x = sx - w / 2, y = sy - h / 2;
+      if (!fits(x, y, w, h)) return;
+      const dim = G.hover && G.hover.kind === "chat" && G.hover.topic !== n.topic;
+      ctx.globalAlpha = dim ? 0.45 : 1;
+      roundRect(ctx, x, y, w, h, 12); ctx.fillStyle = C_.panel; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = C_.line; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x + 12, sy, 4, 0, Math.PI * 2); ctx.fillStyle = n.color; ctx.fill();
+      ctx.fillStyle = C_.text; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(label, x + 21, sy + 0.5);
+      ctx.globalAlpha = 1;
+    });
+    // Chat titles: focus and neighbours first, then search hits, then everything when zoomed in.
+    const want = [];
+    if (focus && focus.kind === "chat") want.push(focus);
+    neighbours.forEach((n) => { if (n !== focus && n.kind === "chat") want.push(n); });
+    if (query) S.hits.forEach((i) => want.push(nodes[i]));
+    if (k >= 1.4) nodes.forEach((n) => { if (n.kind === "chat") want.push(n); });
+    const done = new Set();
+    ctx.font = "12px " + C_.font; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    want.forEach((n) => {
+      if (done.has(n) || !nodeShown(n)) return; done.add(n);
+      const [sx, sy] = toScreen(n);
+      if (sx < -50 || sy < -20 || sx > G.w + 50 || sy > G.h + 20) return;
+      const name = S.chats[n.i].name;
+      const label = name.length > 38 ? name.slice(0, 37) + "…" : name;
+      const w = ctx.measureText(label).width + 12, h = 20, x = sx + n.r * k + 4, y = sy - h / 2;
+      if (!fits(x, y, w, h)) return;
+      const strong = n === focus || neighbours.has(n);
+      roundRect(ctx, x, y, w, h, 6); ctx.fillStyle = C_.panel; ctx.globalAlpha = strong ? 0.96 : 0.82; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = strong ? C_.text : C_.muted; ctx.fillText(label, x + 6, sy + 0.5);
     });
   }
 
@@ -568,9 +705,9 @@
   }
 
   function renderSettings() {
-    const chk = (key, label, note, after) => h("label", null, h("input", { type: "checkbox", checked: S.settings[key] || null, onchange: (e) => { S.settings[key] = e.target.checked; saveSettings(); if (after) after(e.target.checked); } }), h("span", null, label, note ? h("br") : null, note ? h("small", { class: "help" }, note) : null));
+    const chk = (key, label, note, after) => h("label", null, h("input", { type: "checkbox", checked: S.settings[key] === true || null, onchange: (e) => { S.settings[key] = e.target.checked; saveSettings(); if (after) after(e.target.checked); } }), h("span", null, label, note ? h("br") : null, note ? h("small", { class: "help" }, note) : null));
     fill(side, h("h3", null, "Settings"), h("div", { class: "settings" },
-      chk("fab", "Show the round button on claude.ai", "You can still open Chat Tree with Alt+Shift+K or the toolbar icon.", (v) => { fab.style.display = v ? "" : "none"; }),
+      chk("fab", "Always show the round button", "Normally it hides once Chat Tree finds claude.ai's Search window (Tree and Graph tabs appear there). Alt+Shift+K and the toolbar icon always work.", (v) => { S.settings.fab = v ? true : "auto"; saveSettings(); updateFab(); }),
       chk("smart", "Smart grouping (on-device AI)", "A small model bundled with the extension reads chat titles and links them by meaning. It runs outside the claude.ai page on one CPU core, only when there are new chats (about 10 s per 1,000 chats, roughly 150 MB of memory), then unloads a few seconds later.", (v) => { rebuild(); render(); if (v) smartIndex(); }),
       chk("deep", "Deep index (experimental)", "Also reads the first message of each chat, slowly (one chat every 1.5 s), so topics and search are better. The text stays in this browser.", (v) => { if (v) deepIndex(); }),
       h("p", { class: "help" }, Object.keys(S.deep).length + " chats deep-indexed."),
@@ -701,15 +838,63 @@
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); toggle(false); return; }
     const inField = e.composedPath().some((el) => el.tagName === "INPUT" || el.tagName === "SELECT");
     if (e.key === "/" && !inField) { e.preventDefault(); search.focus(); search.select(); }
+    if (!inField && (e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.composedPath().some((el) => el.tagName === "CANVAS")) { e.preventDefault(); setView(S.view === "tree" ? "graph" : "tree"); }
   }, true);
 
   try { ext.runtime.onMessage.addListener((m) => { if (m && m.type === "chat-tree-toggle") toggle(); }); } catch (e) { /* not in an extension (test page) */ }
 
   (async () => {
     S.settings = Object.assign(S.settings, await store.get("settings", {}));
-    fab.style.display = S.settings.fab ? "" : "none";
+    S.hookSeen = await store.get("hookSeen", false);
+    updateFab();
     applyTheme();
   })();
+
+  // ---------- claude.ai Search window: add "Tree" and "Graph" tabs next to All / Artifacts / ... ----------
+  // claude.ai's markup is not public, so this looks for the dialog by its visible tab names and copies the
+  // look of an existing tab. If claude.ai changes it, the round button comes back automatically.
+  function updateFab() { fab.style.display = S.settings.fab === true || (S.settings.fab !== false && !S.hookSeen) ? "" : "none"; }
+  const TAB_NAMES = ["All", "Artifacts", "Sessions", "Code", "Projects", "Scheduled", "Chats"];
+  function findSearchTabs() {
+    const dialogs = document.querySelectorAll('[role="dialog"], dialog[open]');
+    for (const d of dialogs) {
+      if (host.contains(d) || d === panel) continue;
+      const btns = [...d.querySelectorAll('button, [role="tab"]')].filter((b) => !b.dataset.chatTree);
+      const named = btns.filter((b) => TAB_NAMES.includes(b.textContent.trim()));
+      const all = named.find((b) => b.textContent.trim() === "All");
+      if (!all || named.length < 3) continue;
+      const row = all.parentElement;
+      const plain = named.find((b) => b !== all && b.parentElement === row) || all;
+      return { dialog: d, row, plain, input: d.querySelector('input[type="text"], input[type="search"], input:not([type]), [contenteditable="true"]') };
+    }
+    return null;
+  }
+  function closeNativeSearch(found) {
+    const opts = { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, cancelable: true };
+    (found.input || found.dialog).dispatchEvent(new KeyboardEvent("keydown", opts));
+  }
+  function injectTabs() {
+    const found = findSearchTabs();
+    if (!found || found.row.querySelector("[data-chat-tree]")) return;
+    const make = (view, label) => {
+      const b = found.plain.cloneNode(false); // same classes as claude.ai's own tab
+      b.removeAttribute("aria-selected"); b.removeAttribute("data-state"); b.removeAttribute("id"); b.removeAttribute("aria-controls");
+      b.setAttribute("data-chat-tree", view); b.setAttribute("type", "button"); b.setAttribute("title", "Show your chats as a " + label.toLowerCase() + " (Chat Tree)");
+      b.textContent = label;
+      b.addEventListener("click", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const q = found.input ? (found.input.value != null ? found.input.value : found.input.textContent) || "" : "";
+        closeNativeSearch(found);
+        setTimeout(() => toggle(true, { view, query: q }), 0);
+      }, true);
+      return b;
+    };
+    found.row.append(make("tree", "Tree"), make("graph", "Graph"));
+    if (!S.hookSeen) { S.hookSeen = true; store.set("hookSeen", true); updateFab(); }
+  }
+  let hookQueued = false;
+  new MutationObserver(() => { if (hookQueued) return; hookQueued = true; requestAnimationFrame(() => { hookQueued = false; try { injectTabs(); } catch (e) { console.warn("[ChatTree] search hook", e); } }); })
+    .observe(document.documentElement, { childList: true, subtree: true });
 
   globalThis.__chatTreeDebug = { S, toggle, refresh };
 })();
