@@ -1,6 +1,8 @@
-# Chat Tree for Claude (v0.2)
+# Chat Tree for Claude (v0.3)
 
 A browser extension for claude.ai that sorts your chats into a **topic tree** and shows them as a **graph**, with search, tags, filters and related chats. Works in Firefox (including containers) and Chrome. Everything runs in your browser: chat titles are read from claude.ai using your own signed-in session, and nothing is sent anywhere else.
+
+![Graph view in dark mode](docs/graph-dark.png)
 
 ## Downloads
 - **chat-tree-firefox.zip** (about 19 MB, 35 MB installed): Firefox, with the on-device AI model for smart grouping.
@@ -15,7 +17,7 @@ Build them yourself with `./build.sh` (writes `dist/`). The repo's `manifest.jso
 1. Unzip `chat-tree-firefox.zip` somewhere you will keep it.
 2. Open `about:debugging#/runtime/this-firefox`.
 3. Click **Load Temporary Add-on…** and pick `manifest.json` inside the folder.
-4. Open claude.ai (in any container). A small round tree button appears bottom right, or press **Alt+Shift+K**.
+4. Open claude.ai (in any container) and open claude.ai's **Search** window: two new tabs, **Tree** and **Graph**, sit next to All, Artifacts and the rest. **Alt+Shift+K** also works anywhere on claude.ai. (If Chat Tree cannot find the Search window, a small round button appears bottom right instead.)
 5. If nothing shows: open `about:addons`, click Chat Tree, go to **Permissions**, and turn on access to claude.ai.
 
 A temporary add-on is removed when Firefox restarts. To keep it permanently it has to be signed by Mozilla (a free, private "unlisted" upload). Ask Claude to prepare that when you are happy with it.
@@ -23,7 +25,7 @@ A temporary add-on is removed when Firefox restarts. To keep it permanently it h
 ### Chrome / Edge / Brave
 1. Unzip `chat-tree-chrome.zip`, then open `chrome://extensions`.
 2. Turn on **Developer mode** (top right), click **Load unpacked**, and pick the folder.
-3. Open claude.ai and press **Alt+Shift+K** or click the button.
+3. Open claude.ai, open its Search window and pick **Tree** or **Graph**, or press **Alt+Shift+K**.
 
 ## The 10 features
 
@@ -36,7 +38,7 @@ A temporary add-on is removed when Firefox restarts. To keep it permanently it h
 | 5 | **Other ways to group**: by project or by month | Done |
 | 6 | **Filters**: time range, starred only, project, tag | Done |
 | 7 | **Related chats** for any chat; opens on the chat you are currently viewing | Done |
-| 8 | **Keyboard shortcuts**: Alt+Shift+K, `/` search, Enter opens the first match, Esc closes, Ctrl+click new tab | Done |
+| 8 | **Keyboard**: Alt+Shift+K, `/` search, ↑ ↓ move through chats, Enter opens, ← → switch Tree and Graph, Esc closes, Ctrl+click new tab | Done |
 | 9 | **Export** the tree as a Markdown outline (with links) or JSON | Done |
 | 10 | **Deep index** (opt-in, in Settings): reads the first message of each chat slowly, for better topics and search. Text stays local | Done, experimental |
 | 11 | **Smart grouping (on-device AI)**: a small model (all-MiniLM-L6-v2, int8) bundled in the extension turns each title into a "meaning" vector, so chats link even when they share no words (e.g. "Pandas merge two dataframes" and "How to join two tables in pandas"). Used for related chats, graph links, and grouping chats the subject list does not cover | Done (full version) |
@@ -55,6 +57,14 @@ Turn it off any time in Settings, or install the lite version.
 
 Ideas for later: renaming or merging topics by hand, syncing tags across your devices, finding near-duplicate chats, bulk actions (star, move to project, delete).
 
+## Look and feel
+- **Inside claude.ai's Search window**: Tree and Graph tabs are added next to claude.ai's own tabs and use the same style. Whatever you typed in Search carries over.
+- **Claude's own theme**: colours, surfaces and font are read from claude.ai's theme at runtime, so light and dark mode match exactly and follow theme switches. No gradients, because claude.ai's surfaces are flat. Topic colours come from the Claude palette (clay, sky, olive, fig, kraft, cactus, heather).
+- **Graph**: each topic sits in its own soft halo, links are curved and weighted by similarity, dots grow with how connected a chat is, and labels are pills that never overlap.
+
+## Tests
+`npm test` runs the unit tests for grouping, search, related chats and the graph (Node 18+, no dependencies).
+
 ## How it works and caveats
 - The chat list comes from claude.ai's own internal endpoints (`/api/organizations/.../chat_conversations`). These are not a public API, so a claude.ai update could break loading. The last loaded list is kept so the view still works.
 - Without smart grouping, topics come from a built-in vocabulary of about 25 subjects plus word overlap between titles. Chats on subjects it does not know are grouped by shared words, and loners go to "Other chats". Tag a few chats to pull them together.
@@ -63,7 +73,8 @@ Ideas for later: renaming or merging topics by hand, syncing tags across your de
 
 ## Files
 - `manifest.json`: Manifest V3, works in both browsers
-- `background.js`: toolbar button and keyboard command
+- `background.js`: toolbar button, keyboard command, and the on-device model host
+- `tests/`: unit tests (`npm test`)
 - `src/api.js`: reads chats from claude.ai
 - `src/cluster.js`: topic grouping, graph links, related chats, search (no network)
 - `src/content.js`, `src/styles.js`: the overlay

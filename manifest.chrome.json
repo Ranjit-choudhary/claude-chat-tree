@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chat Tree for Claude",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Organises your claude.ai chats into a topic tree and a graph, with search, tags, filters and related chats. Everything stays in your browser.",
   "icons": {
     "16": "icons/icon16.png",

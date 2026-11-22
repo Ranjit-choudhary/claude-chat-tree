@@ -70,11 +70,6 @@
     const tag = "@" + name;
     words.split(/\s+/).forEach((w) => { const k = stem(w); if (!CONCEPT_OF.has(k)) CONCEPT_OF.set(k, []); CONCEPT_OF.get(k).push(tag); });
   });
-  function concepts(tokens) {
-    const out = [];
-    tokens.forEach((t) => { const c = CONCEPT_OF.get(t); if (c) out.push(...c); });
-    return [...new Set(out)];
-  }
 
   // Each chat: {uuid, name, summary, extraText?, tags?}
   function buildIndex(chats) {
@@ -86,14 +81,14 @@
       const x = tokenize(c.extraText);
       const g = (c.tags || []).flatMap((tag) => tokenize(tag));
       const base = t.concat(t, s, x, g, g, g);
-      const cs = concepts(base);
       // Strongest concept for this chat (title words count double because they appear twice in base).
       const cc = new Map();
       base.forEach((tok) => (CONCEPT_OF.get(tok) || []).forEach((c) => cc.set(c, (cc.get(c) || 0) + 1)));
       let top = null, tv = 0;
       cc.forEach((v, c) => { if (v > tv) { tv = v; top = c; } });
       topConcept.push(top);
-      return base.concat(cs, cs);
+      // Only the chat's strongest subject goes into its vector, so one shared word (e.g. "merge") cannot pull it into another subject.
+      return top ? base.concat([top, top]) : base;
     });
     const df = new Map();
     docs.forEach((d) => new Set(d).forEach((w) => df.set(w, (df.get(w) || 0) + 1)));
