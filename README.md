@@ -2,14 +2,17 @@
 
 A browser extension for claude.ai that sorts your chats into a **topic tree** and shows them as a **graph**, with search, tags, filters and related chats. Works in Firefox (including containers) and Chrome. Everything runs in your browser: chat titles are read from claude.ai using your own signed-in session, and nothing is sent anywhere else.
 
-## Two versions
-- **chat-tree-extension.zip** (full, about 19 MB download, 35 MB installed): includes the on-device AI model for smart grouping.
-- **chat-tree-lite.zip** (about 40 KB): same features, basic grouping only (built-in subject list plus shared words).
+## Downloads
+- **chat-tree-firefox.zip** (about 19 MB, 35 MB installed): Firefox, with the on-device AI model for smart grouping.
+- **chat-tree-chrome.zip** (about 19 MB): Chrome / Edge / Brave, with the model.
+- **chat-tree-lite-firefox.zip** (about 40 KB): Firefox, basic grouping only (built-in subject list plus shared words).
+
+Build them yourself with `./build.sh` (writes `dist/`). The repo's `manifest.json` is the Firefox one; `manifest.chrome.json` is used for the Chrome zip.
 
 ## Install
 
 ### Firefox
-1. Unzip `chat-tree-extension.zip` somewhere you will keep it.
+1. Unzip `chat-tree-firefox.zip` somewhere you will keep it.
 2. Open `about:debugging#/runtime/this-firefox`.
 3. Click **Load Temporary Add-on…** and pick `manifest.json` inside the folder.
 4. Open claude.ai (in any container). A small round tree button appears bottom right, or press **Alt+Shift+K**.
@@ -18,7 +21,7 @@ A browser extension for claude.ai that sorts your chats into a **topic tree** an
 A temporary add-on is removed when Firefox restarts. To keep it permanently it has to be signed by Mozilla (a free, private "unlisted" upload). Ask Claude to prepare that when you are happy with it.
 
 ### Chrome / Edge / Brave
-1. Unzip, then open `chrome://extensions`.
+1. Unzip `chat-tree-chrome.zip`, then open `chrome://extensions`.
 2. Turn on **Developer mode** (top right), click **Load unpacked**, and pick the folder.
 3. Open claude.ai and press **Alt+Shift+K** or click the button.
 

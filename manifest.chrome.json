@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Chat Tree for Claude",
+  "version": "0.2.0",
+  "description": "Organises your claude.ai chats into a topic tree and a graph, with search, tags, filters and related chats. Everything stays in your browser.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "https://claude.ai/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Chat Tree (Alt+Shift+K)",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "commands": {
+    "toggle-chat-tree": {
+      "suggested_key": {
+        "default": "Alt+Shift+K"
+      },
+      "description": "Open or close Chat Tree"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://claude.ai/*"
+      ],
+      "js": [
+        "src/cluster.js",
+        "src/api.js",
+        "src/styles.js",
+        "src/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

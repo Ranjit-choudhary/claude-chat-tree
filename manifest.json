@@ -10,14 +10,12 @@
   },
   "permissions": [
     "storage",
-    "unlimitedStorage",
-    "offscreen"
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://claude.ai/*"
   ],
   "background": {
-    "service_worker": "background.js",
     "scripts": [
       "background.js"
     ]
